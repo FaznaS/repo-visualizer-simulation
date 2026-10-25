@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Massive Python Repo Impact Visualizer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        cyberBg: '#0b0f19',
+                        panelBg: '#111827',
+                        cardBg: '#1f2937',
+                        accentCyan: '#38bdf8',
+                        impactRed: '#f43f5e',
+                        warningAmber: '#f59e0b',
+                        hopGreen: '#10b981',
+                        mutedSlate: '#334155'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: #0b0f19;
+            color: #f8fafc;
+            overflow: hidden;
+        }
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #111827;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        canvas {
+            touch-action: none;
+        }
+        .glass-panel {
+            background: rgba(17, 24, 39, 0.75);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .tree-item-active {
+            background-color: rgba(56, 189, 248, 0.12);
+            border-left: 3px solid #38bdf8;
+            color: #ffffff !important;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col antialiased select-none">
+
+    <header class="h-14 bg-panelBg/90 border-b border-slate-800/80 flex items-center justify-between px-6 z-30 shrink-0">
+        <!-- Logo & Product Title -->
+        <div class="flex items-center space-x-3">
+            <div class="p-2 bg-sky-500/10 border border-sky-500/20 rounded-lg text-sky-400">
+                <i data-lucide="orbit" class="w-4 h-4"></i>
+            </div>
+            <div>
+                <span class="font-bold text-sm text-white tracking-wide">Repo Visualizer</span>
+            </div>
+        </div>
+
+        <!-- REPOSITORY SCALE SWITCHER -->
+        <div class="flex items-center space-x-3">
+            <div class="flex items-center bg-slate-900 border border-slate-800 p-1 rounded-xl text-xs font-mono">
+                <button id="btnRepoStandard" class="px-2.5 py-1 rounded-lg text-slate-400 transition">Selected</button>
+                <button id="btnRepoMassive" class="px-2.5 py-1 rounded-lg bg-sky-500 text-slate-950 font-bold shadow">Whole</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN WORKSPACE -->
+    <div class="flex-1 flex overflow-hidden relative">
+
+        <!-- LEFT SIDEBAR: CLEAN REPOSITORY EXPLORER -->
+        <aside class="w-64 bg-panelBg/80 border-r border-slate-800/80 flex flex-col h-full z-20 shrink-0">
+            <div class="p-3 border-b border-slate-800/80 space-y-2">
+                <div class="flex items-center justify-between">
+                    <span class="font-bold text-xs text-slate-300 flex items-center gap-1.5">
+                        <i data-lucide="folder-tree" class="w-3.5 h-3.5 text-sky-400"></i>
+                        Explorer
+                    </span>
+                    <span id="repoScaleBadge" class="text-[10px] bg-sky-950 text-sky-400 border border-sky-800/60 px-2 py-0.5 rounded font-mono">2,542 Files</span>
+                </div>
+            </div>
+
+            <!-- File Tree Explorer -->
+            <div class="flex-1 overflow-y-auto p-2 text-xs font-mono space-y-1" id="repoTreeContainer">
+                <!-- Populated dynamically via JS -->
+            </div>
+
+            <!-- Theory Footer Badge -->
+            <div class="p-3 border-t border-slate-800/80 bg-slate-950/60 text-[10px] text-slate-400 leading-tight space-y-1">
+                <div class="text-sky-400 font-bold flex items-center gap-1">
+                    <i data-lucide="sparkles" class="w-3 h-3"></i> Cognitive Load Optimization
+                </div>
+                <p>2,500+ non-impacted files are automatically collapsed into package hulls to keep visual clutter low.</p>
+            </div>
+        </aside>
+
+        <!-- CENTER CANVAS: EGO-CENTRIC RADIAL RINGS -->
+        <div class="flex-1 h-full w-full relative bg-cyberBg flex flex-col" id="canvasContainer">
+            
+            <!-- TOP STREAMLINED CONTROLS & TIMELINE STEPPER -->
+            <div class="absolute top-4 left-1/2 -translate-x-1/2 z-10 glass-panel rounded-2xl px-4 py-2 shadow-2xl flex items-center space-x-4 border border-slate-800">
+
+                <!-- Domino Timeline Step Badges ($T_0 \to T_3$) -->
+                <div class="flex items-center space-x-2 text-xs font-mono">
+                    <button id="stepT0" class="step-btn px-2.5 py-1 rounded-lg bg-rose-950 border border-rose-700 text-rose-300 font-bold">T0: Target</button>
+                    <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-slate-600"></i>
+                    <button id="stepT1" class="step-btn px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-slate-400">T1: Hop1</button>
+                    <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-slate-600"></i>
+                    <button id="stepT2" class="step-btn px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-slate-400">T2: Hop2</button>
+                    <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-slate-600"></i>
+                    <button id="stepT3" class="step-btn px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-slate-400">T3: Hop3</button>
+                </div>
+
+                <div class="h-5 w-px bg-slate-800"></div>
+
+                <!-- Zoom Controls -->
+                <div class="flex items-center space-x-2 text-xs">
+                    <span id="zoomText" class="text-slate-400 font-mono">100%</span>
+                    <button id="btnResetView" class="p-1 bg-slate-800 hover:bg-slate-700 rounded border border-slate-700 text-slate-200">
+                        <i data-lucide="maximize-2" class="w-3.5 h-3.5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Bottom Floating Legend -->
+            <div class="absolute bottom-4 left-4 z-10 glass-panel rounded-xl px-3 py-2 text-xs flex items-center space-x-4 border border-slate-800">
+                <div class="flex items-center space-x-1.5 text-sky-400">
+                    <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+                    <span>Needs</span>
+                </div>
+                <div class="h-3 w-px bg-slate-700"></div>
+                <div class="flex items-center space-x-1.5 text-rose-400">
+                    <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                    <span>Hop 1</span>
+                </div>
+                <div class="flex items-center space-x-1.5 text-amber-400">
+                    <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                    <span>Hop 2</span>
+                </div>
+                <div class="flex items-center space-x-1.5 text-emerald-400">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                    <span>Hop 3</span>
+                </div>
+                <div class="flex items-center space-x-1.5 text-slate-500">
+                    <span class="w-2.5 h-2.5 rounded-full bg-slate-700"></span>
+                    <span>Aggregate Packages</span>
+                </div>
+            </div>
+
+            <!-- The Interactive Radial Canvas -->
+            <canvas id="vizCanvas" class="w-full h-full block cursor-grab active:cursor-grabbing"></canvas>
+        </div>
+
+        <!-- RIGHT SIDEBAR: INSPECTION & DOMINO STEP DETAIL -->
+        <aside class="w-72 bg-panelBg/80 border-l border-slate-800/80 flex flex-col h-full z-20 shrink-0">
+            <div class="p-3 border-b border-slate-800/80 flex items-center justify-between">
+                <span class="font-bold text-xs text-slate-300 flex items-center gap-1.5">
+                    <i data-lucide="layers" class="w-3.5 h-3.5 text-sky-400"></i>
+                    Inspection & Trace
+                </span>
+                <span id="inspStepTag" class="text-[10px] bg-rose-950 text-rose-400 border border-rose-800/60 px-2 py-0.5 rounded font-mono">Step T0</span>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-3 space-y-4" id="inspectorContent">
+                
+                <!-- Selected Function Node Detail -->
+                <div class="bg-slate-900/90 p-3 rounded-xl border border-slate-800/80 space-y-2">
+                    <div class="text-[10px] font-mono text-slate-500" id="inspFile">auth/service.py</div>
+                    <div class="font-bold text-white text-sm font-mono" id="inspName">def login()</div>
+                    <p class="text-xs text-slate-300 font-sans leading-relaxed" id="inspDesc">
+                        Modifying login parameters triggers cascaded updates down HTTP handlers and session managers.
+                    </p>
+                    <div class="bg-slate-950 p-2 rounded-lg text-[11px] font-mono text-sky-300 overflow-x-auto border border-slate-800/60" id="inspSignature">
+                        def login(user: str, secret: str) -> Token:
+                    </div>
+                </div>
+
+                <!-- Domino Step Path Trace ($A \rightarrow B \rightarrow C \rightarrow D$) -->
+                <div class="space-y-2">
+                    <div class="text-[11px] font-bold text-slate-300 flex items-center justify-between">
+                        <span class="flex items-center gap-1.5"><i data-lucide="git-commit" class="w-3.5 h-3.5 text-rose-400"></i> Propagation Chain</span>
+                    </div>
+
+                    <div class="bg-slate-950 rounded-xl p-2.5 border border-slate-800/80 space-y-2 font-mono text-xs" id="dominoChainList">
+                        <!-- Populated dynamically via JS -->
+                    </div>
+                </div>
+
+                <!-- Test Suites Impacted -->
+                <div class="space-y-2 pt-2 border-t border-slate-800/80">
+                    <div class="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+                        <i data-lucide="flask-conical" class="w-3.5 h-3.5 text-purple-400"></i> Affected Tests
+                    </div>
+                    <div id="inspTests" class="space-y-1.5 text-xs font-mono">
+                        <!-- Populated via JS -->
+                    </div>
+                </div>
+
+            </div>
+        </aside>
+    </div>
+
+    <!-- PREVIEW MODAL FOR RESERVED FUTURE FEATURES -->
+    <div id="futureModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="glass-panel max-w-md w-full rounded-2xl p-6 border border-slate-800 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div class="flex items-center gap-2">
+                    <div class="p-2 bg-sky-500/10 text-sky-400 rounded-lg">
+                        <i data-lucide="layout-grid" class="w-5 h-5"></i>
+                    </div>
+                    <h3 class="font-bold text-sm text-white" id="modalTitle">Module Preview</h3>
+                </div>
+                <button onclick="closeFutureModal()" class="text-slate-400 hover:text-white p-1">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+            <p class="text-xs text-slate-300 leading-relaxed" id="modalDesc">
+                This space is reserved for the upcoming feature integration. You will be able to seamlessly switch between repository blast radius visualizations and contributor guides.
+            </p>
+            <div class="pt-2 flex justify-end">
+                <button onclick="closeFutureModal()" class="px-4 py-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-xl text-xs transition">
+                    Got it
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Script -->
+    <script>
+        // DATASETS FOR STANDARD VS MASSIVE ENTERPRISE REPOSITORIES
+        const REPO_DATASETS = {
+            standard: {
+                totalFiles: 148,
+                folders: [
+                    { name: 'auth/', files: ['service.py', 'middleware.py', 'session.py', 'hash.py'] },
+                    { name: 'api/v1/', files: ['auth_routes.py', 'user_routes.py'] },
+                    { name: 'frontend/', files: ['dashboard_bridge.py'] },
+                    { name: 'billing/', files: ['subscription_check.py'] },
+                    { name: 'tests/', files: ['test_e2e_login.py'] }
+                ],
+                nodes: [
+                    { id: 'auth_service', name: 'def login()', file: 'auth/service.py', folder: 'auth/', ring: 0, hop: 0, timeStep: 0, side: 'center', desc: 'Target function being modified.', signature: 'def login(user: str, pass: str):', tests: ['pytest tests/test_auth.py'] },
+                    { id: 'auth_hash', name: 'verify_hash()', file: 'auth/hash.py', folder: 'auth/', ring: 1, hop: -1, timeStep: 0, side: 'upstream', desc: 'Cryptographic hash checking function.', signature: 'def verify_hash(plain, hashed):', tests: ['pytest tests/test_hash.py'] },
+                    { id: 'auth_crypto', name: 'decrypt_token()', file: 'auth/crypto.py', folder: 'auth/', ring: 1, hop: -1, timeStep: 0, side: 'upstream', desc: 'Decrypts user payload tokens.', signature: 'def decrypt_token(token_str):', tests: [] },
+                    { id: 'auth_middleware', name: 'AuthMiddleware', file: 'auth/middleware.py', folder: 'auth/', ring: 1, hop: 1, timeStep: 1, side: 'downstream', desc: 'Intercepts incoming HTTP headers to validate auth.', signature: 'class AuthMiddleware(BaseMiddleware):', tests: ['pytest tests/test_middleware.py'] },
+                    { id: 'auth_session', name: 'create_session()', file: 'auth/session.py', folder: 'auth/', ring: 1, hop: 1, timeStep: 1, side: 'downstream', desc: 'Session generator triggered on login.', signature: 'def create_session(user_id):', tests: ['pytest tests/test_session.py'] },
+                    { id: 'api_auth_routes', name: 'login_endpoint()', file: 'api/v1/auth_routes.py', folder: 'api/v1/', ring: 2, hop: 2, timeStep: 2, side: 'downstream', desc: 'POST /api/v1/login endpoint.', signature: '@app.post("/login")\ndef login_endpoint():', tests: ['pytest tests/api/test_auth_routes.py'] },
+                    { id: 'api_user_routes', name: 'get_profile()', file: 'api/v1/user_routes.py', folder: 'api/v1/', ring: 2, hop: 2, timeStep: 2, side: 'downstream', desc: 'User profile route dependent on session.', signature: '@app.get("/profile")\ndef get_profile():', tests: ['pytest tests/api/test_user_routes.py'] },
+                    { id: 'frontend_bridge', name: 'render_dashboard()', file: 'frontend/dashboard_bridge.py', folder: 'frontend/', ring: 3, hop: 3, timeStep: 3, side: 'downstream', desc: 'Front-end SSR dashboard bridge.', signature: 'def render_dashboard(token):', tests: ['pytest tests/e2e/test_dashboard.py'] },
+                    { id: 'billing_sub', name: 'check_subscription()', file: 'billing/subscription_check.py', folder: 'billing/', ring: 3, hop: 3, timeStep: 3, side: 'downstream', desc: 'Verifies active subscription.', signature: 'def check_subscription(user_id):', tests: ['pytest tests/billing/'] }
+                ],
+                links: [
+                    { source: 'auth_hash', target: 'auth_service', hop: -1 },
+                    { source: 'auth_crypto', target: 'auth_service', hop: -1 },
+                    { source: 'auth_service', target: 'auth_middleware', hop: 1 },
+                    { source: 'auth_service', target: 'auth_session', hop: 1 },
+                    { source: 'auth_middleware', target: 'api_auth_routes', hop: 2 },
+                    { source: 'auth_session', target: 'api_user_routes', hop: 2 },
+                    { source: 'api_auth_routes', target: 'frontend_bridge', hop: 3 },
+                    { source: 'api_user_routes', target: 'billing_sub', hop: 3 }
+                ]
+            },
+
+            massive: {
+                totalFiles: 2542,
+                folders: [
+                    { name: 'auth/', files: ['service.py', 'middleware.py', 'session.py', 'hash.py'] },
+                    { name: 'api/v1/', files: ['auth_routes.py', 'user_routes.py'] },
+                    { name: 'frontend/', files: ['dashboard_bridge.py'] },
+                    { name: 'billing/', files: ['subscription_check.py'] },
+                    // Aggregated Hulls (CLT / IFT)
+                    { name: 'django.db/ [Collapsed]', files: ['+320 files collapsed'] },
+                    { name: 'django.contrib.admin/ [Collapsed]', files: ['+380 files collapsed'] },
+                    { name: 'services.payment/ [Collapsed]', files: ['+410 files collapsed'] },
+                    { name: 'serializers/ [Collapsed]', files: ['+240 files collapsed'] }
+                ],
+                nodes: [
+                    { id: 'auth_service', name: 'def login()', file: 'auth/service.py', folder: 'auth/', ring: 0, hop: 0, timeStep: 0, side: 'center', desc: 'Central target function being modified.', signature: 'def login(user: str, pass: str):', tests: ['pytest tests/test_auth.py'] },
+                    { id: 'auth_hash', name: 'verify_hash()', file: 'auth/hash.py', folder: 'auth/', ring: 1, hop: -1, timeStep: 0, side: 'upstream', desc: 'Cryptographic hash checking function.', signature: 'def verify_hash(plain, hashed):', tests: ['pytest tests/test_hash.py'] },
+                    { id: 'auth_crypto', name: 'decrypt_token()', file: 'auth/crypto.py', folder: 'auth/', ring: 1, hop: -1, timeStep: 0, side: 'upstream', desc: 'Decryption module.', signature: 'def decrypt_token(token_str):', tests: [] },
+                    { id: 'auth_middleware', name: 'AuthMiddleware', file: 'auth/middleware.py', folder: 'auth/', ring: 1, hop: 1, timeStep: 1, side: 'downstream', desc: 'Intercepts HTTP requests for auth validation.', signature: 'class AuthMiddleware(BaseMiddleware):', tests: ['pytest tests/test_middleware.py'] },
+                    { id: 'auth_session', name: 'create_session()', file: 'auth/session.py', folder: 'auth/', ring: 1, hop: 1, timeStep: 1, side: 'downstream', desc: 'Session manager.', signature: 'def create_session(user_id):', tests: ['pytest tests/test_session.py'] },
+                    { id: 'api_auth_routes', name: 'login_endpoint()', file: 'api/v1/auth_routes.py', folder: 'api/v1/', ring: 2, hop: 2, timeStep: 2, side: 'downstream', desc: 'POST /login endpoint route handler.', signature: '@app.post("/login")\ndef login_endpoint():', tests: ['pytest tests/api/test_auth_routes.py'] },
+                    { id: 'api_user_routes', name: 'get_profile()', file: 'api/v1/user_routes.py', folder: 'api/v1/', ring: 2, hop: 2, timeStep: 2, side: 'downstream', desc: 'User profile route handler.', signature: '@app.get("/profile")\ndef get_profile():', tests: ['pytest tests/api/test_user_routes.py'] },
+                    { id: 'frontend_bridge', name: 'render_dashboard()', file: 'frontend/dashboard_bridge.py', folder: 'frontend/', ring: 3, hop: 3, timeStep: 3, side: 'downstream', desc: 'Front-end SSR dashboard rendering.', signature: 'def render_dashboard(token):', tests: ['pytest tests/e2e/test_dashboard.py'] },
+                    { id: 'billing_sub', name: 'check_subscription()', file: 'billing/subscription_check.py', folder: 'billing/', ring: 3, hop: 3, timeStep: 3, side: 'downstream', desc: 'Subscription verification.', signature: 'def check_subscription(user_id):', tests: ['pytest tests/billing/'] },
+
+                    // AGGREGATE PACKAGE SUPER-NODES (COLLAPSED IN MASSIVE MODE)
+                    { id: 'hull_db', name: 'django.db', file: '+320 files collapsed', folder: 'django.db/', ring: 3, hop: 99, timeStep: 99, side: 'upstream', isHull: true, desc: 'Collapsed package hull (320 files). Low relevance scent.', signature: '[ Package Aggregate: 320 files ]', tests: [] },
+                    { id: 'hull_admin', name: 'django.contrib.admin', file: '+380 files collapsed', folder: 'django.contrib.admin/', ring: 3, hop: 99, timeStep: 99, side: 'downstream', isHull: true, desc: 'Collapsed package hull (380 files). Zero impact scent.', signature: '[ Package Aggregate: 380 files ]', tests: [] },
+                    { id: 'hull_payment', name: 'services.payment', file: '+410 files collapsed', folder: 'services.payment/', ring: 3, hop: 99, timeStep: 99, side: 'downstream', isHull: true, desc: 'Collapsed package hull (410 files). Zero impact scent.', signature: '[ Package Aggregate: 410 files ]', tests: [] },
+                    { id: 'hull_serializers', name: 'serializers', file: '+240 files collapsed', folder: 'serializers/', ring: 3, hop: 99, timeStep: 99, side: 'downstream', isHull: true, desc: 'Collapsed package hull (240 files).', signature: '[ Package Aggregate: 240 files ]', tests: [] }
+                ],
+                links: [
+                    { source: 'auth_hash', target: 'auth_service', hop: -1 },
+                    { source: 'auth_crypto', target: 'auth_service', hop: -1 },
+                    { source: 'auth_service', target: 'auth_middleware', hop: 1 },
+                    { source: 'auth_service', target: 'auth_session', hop: 1 },
+                    { source: 'auth_middleware', target: 'api_auth_routes', hop: 2 },
+                    { source: 'auth_session', target: 'api_user_routes', hop: 2 },
+                    { source: 'api_auth_routes', target: 'frontend_bridge', hop: 3 },
+                    { source: 'api_user_routes', target: 'billing_sub', hop: 3 }
+                ]
+            }
+        };
+
+        // APPLICATION STATE
+        let currentDatasetKey = 'massive';
+        let currentDataset = REPO_DATASETS.massive;
+        let currentTimeStep = 0; // 0 (T0), 1 (T1), 2 (T2), 3 (T3)
+        let isPlaying = false;
+        let playInterval = null;
+
+        let canvas, ctx;
+        let width, height;
+        let transform = { x: 0, y: 0, k: 1 };
+        let isDragging = false;
+        let dragStart = { x: 0, y: 0 };
+        let selectedNode = null;
+        let hoveredNode = null;
+        let animFrame = 0;
+
+        const ringRadius = [0, 140, 270, 400];
+
+        window.addEventListener('load', () => {
+            canvas = document.getElementById('vizCanvas');
+            ctx = canvas.getContext('2d');
+
+            lucide.createIcons();
+            initDataset('massive');
+            resizeCanvas();
+            attachEventListeners();
+
+            requestAnimationFrame(renderLoop);
+        });
+
+        function initDataset(key) {
+            currentDatasetKey = key;
+            currentDataset = REPO_DATASETS[key];
+            selectedNode = currentDataset.nodes.find(n => n.id === 'auth_service');
+
+            buildFileTreeUI();
+            computeNodePositions();
+            updateTimelineUI();
+            updateInspectorUI();
+            highlightTreeItem(selectedNode.id);
+
+            document.getElementById('repoScaleBadge').innerText = `${currentDataset.totalFiles.toLocaleString()} Files`;
+            
+            if (key === 'massive') {
+                document.getElementById('btnRepoMassive').className = "px-2.5 py-1 rounded-lg bg-sky-500 text-slate-950 font-bold shadow";
+                document.getElementById('btnRepoStandard').className = "px-2.5 py-1 rounded-lg text-slate-400 transition";
+            } else {
+                document.getElementById('btnRepoStandard').className = "px-2.5 py-1 rounded-lg bg-sky-500 text-slate-950 font-bold shadow";
+                document.getElementById('btnRepoMassive').className = "px-2.5 py-1 rounded-lg text-slate-400 transition";
+            }
+        }
+
+        // BUILD FILE TREE EXPLORER
+        function buildFileTreeUI() {
+            const container = document.getElementById('repoTreeContainer');
+            container.innerHTML = '';
+
+            currentDataset.folders.forEach(folder => {
+                const folderDiv = document.createElement('div');
+                folderDiv.className = 'space-y-0.5';
+
+                const isAggregated = folder.name.includes('[Collapsed]');
+
+                const folderHeader = document.createElement('div');
+                folderHeader.className = `flex items-center space-x-1.5 py-1 px-1 rounded cursor-pointer ${isAggregated ? 'text-slate-500 italic' : 'text-slate-300 font-bold'}`;
+                folderHeader.innerHTML = `
+                    <i data-lucide="${isAggregated ? 'box' : 'folder'}" class="w-3.5 h-3.5 ${isAggregated ? 'text-slate-600' : 'text-sky-400'}"></i>
+                    <span class="truncate">${folder.name}</span>
+                `;
+                folderDiv.appendChild(folderHeader);
+
+                folder.files.forEach(fileName => {
+                    const node = currentDataset.nodes.find(n => n.file === fileName || (n.file.includes(fileName)));
+                    const fileEl = document.createElement('div');
+                    
+                    if (node) {
+                        fileEl.id = `tree-${node.id}`;
+                        fileEl.className = `flex items-center justify-between pl-5 pr-2 py-1 rounded text-slate-400 hover:text-white cursor-pointer text-[11px] ${node.id === selectedNode.id ? 'tree-item-active' : ''}`;
+                        fileEl.innerHTML = `
+                            <div class="flex items-center space-x-1.5 truncate">
+                                <i data-lucide="file-code" class="w-3 h-3 text-slate-500 shrink-0"></i>
+                                <span class="truncate">${fileName}</span>
+                            </div>
+                            <span class="text-[9px] px-1.5 py-0.2 rounded font-sans ${node.timeStep <= currentTimeStep ? 'bg-rose-950 text-rose-300 border border-rose-800' : 'bg-slate-800 text-slate-500'}">
+                                ${node.ring === 0 ? 'T0' : 'T' + node.timeStep}
+                            </span>
+                        `;
+                        fileEl.addEventListener('click', () => {
+                            selectedNode = node;
+                            highlightTreeItem(node.id);
+                            updateInspectorUI();
+                        });
+                    } else {
+                        fileEl.className = `pl-5 pr-2 py-0.5 text-[10px] text-slate-600 italic truncate`;
+                        fileEl.innerText = fileName;
+                    }
+                    folderDiv.appendChild(fileEl);
+                });
+
+                container.appendChild(folderDiv);
+            });
+            lucide.createIcons();
+        }
+
+        function highlightTreeItem(nodeId) {
+            document.querySelectorAll('#repoTreeContainer [id^="tree-"]').forEach(el => {
+                el.classList.remove('tree-item-active');
+            });
+            const activeEl = document.getElementById(`tree-${nodeId}`);
+            if (activeEl) {
+                activeEl.classList.add('tree-item-active');
+                activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+        }
+
+        // POSITION NODES ALONG RADIAL RINGS
+        function computeNodePositions() {
+            const centerNode = currentDataset.nodes.find(n => n.ring === 0);
+            if (centerNode) {
+                centerNode.x = 0;
+                centerNode.y = 0;
+            }
+
+            [1, 2, 3].forEach(ringIdx => {
+                const ringNodes = currentDataset.nodes.filter(n => n.ring === ringIdx);
+                const upstream = ringNodes.filter(n => n.side === 'upstream');
+                const downstream = ringNodes.filter(n => n.side === 'downstream');
+
+                // Left Hemisphere: Upstream
+                upstream.forEach((node, i) => {
+                    const angle = Math.PI/2 + (Math.PI / (upstream.length + 1)) * (i + 1);
+                    node.x = ringRadius[ringIdx] * Math.cos(angle);
+                    node.y = ringRadius[ringIdx] * Math.sin(angle);
+                });
+
+                // Right Hemisphere: Downstream
+                downstream.forEach((node, i) => {
+                    const angle = -Math.PI/2 + (Math.PI / (downstream.length + 1)) * (i + 1);
+                    node.x = ringRadius[ringIdx] * Math.cos(angle);
+                    node.y = ringRadius[ringIdx] * Math.sin(angle);
+                });
+            });
+        }
+
+        function resizeCanvas() {
+            const container = document.getElementById('canvasContainer');
+            width = container.clientWidth;
+            height = container.clientHeight;
+            canvas.width = width * window.devicePixelRatio;
+            canvas.height = height * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+            transform.x = width / 2;
+            transform.y = height / 2;
+        }
+
+        // RENDER LOOP
+        function renderLoop() {
+            animFrame++;
+            ctx.clearRect(0, 0, width, height);
+
+            ctx.save();
+            ctx.translate(transform.x, transform.y);
+            ctx.scale(transform.k, transform.k);
+
+            drawConcentricGuides();
+            drawConnections();
+            drawNodes();
+
+            ctx.restore();
+
+            requestAnimationFrame(renderLoop);
+        }
+
+        function drawConcentricGuides() {
+            const labels = ['Origin T0', 'Ring 1 (Hop 1)', 'Ring 2 (Hop 2)', 'Ring 3 (Hop 3 / Package Hulls)'];
+            ringRadius.forEach((r, idx) => {
+                if (idx === 0) return;
+                ctx.beginPath();
+                ctx.arc(0, 0, r, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(51, 65, 85, 0.25)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([5, 5]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                ctx.fillStyle = '#475569';
+                ctx.font = '10px monospace';
+                ctx.fillText(labels[idx], 10, -r + 14);
+            });
+
+            // Center Dividing Axis
+            ctx.beginPath();
+            ctx.moveTo(0, -ringRadius[3] - 20);
+            ctx.lineTo(0, ringRadius[3] + 20);
+            ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
+        function drawConnections() {
+            currentDataset.links.forEach(link => {
+                const src = currentDataset.nodes.find(n => n.id === link.source);
+                const tgt = currentDataset.nodes.find(n => n.id === link.target);
+
+                if (!src || !tgt) return;
+
+                const isLinkActive = (tgt.timeStep <= currentTimeStep);
+                const isSelected = selectedNode && (selectedNode.id === src.id || selectedNode.id === tgt.id);
+
+                ctx.beginPath();
+                ctx.moveTo(src.x, src.y);
+                const midX = (src.x + tgt.x) / 2;
+                const midY = (src.y + tgt.y) / 2;
+                ctx.quadraticCurveTo(midX * 0.8, midY * 0.8, tgt.x, tgt.y);
+
+                if (isLinkActive) {
+                    ctx.strokeStyle = isSelected ? '#38bdf8' : '#f43f5e';
+                    ctx.lineWidth = isSelected ? 2.5 : 1.5;
+                    ctx.stroke();
+
+                    // Glowing Domino Waves
+                    const speed = 0.025;
+                    const progress = (animFrame * speed) % 1;
+                    const px = (1 - progress) * (1 - progress) * src.x + 2 * (1 - progress) * progress * (midX * 0.8) + progress * progress * tgt.x;
+                    const py = (1 - progress) * (1 - progress) * src.y + 2 * (1 - progress) * progress * (midY * 0.8) + progress * progress * tgt.y;
+
+                    ctx.beginPath();
+                    ctx.arc(px, py, 3, 0, Math.PI * 2);
+                    ctx.fillStyle = '#38bdf8';
+                    ctx.shadowColor = '#38bdf8';
+                    ctx.shadowBlur = 8;
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                } else {
+                    ctx.strokeStyle = 'rgba(51, 65, 85, 0.2)';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+            });
+        }
+
+        function drawNodes() {
+            currentDataset.nodes.forEach(node => {
+                const isCenter = node.ring === 0;
+                const isActivated = node.timeStep <= currentTimeStep;
+                const isSelected = selectedNode && selectedNode.id === node.id;
+
+                let color = '#334155';
+                if (node.isHull) color = '#1e293b';
+                else if (isActivated) {
+                    if (isCenter) color = '#f43f5e';
+                    else if (node.timeStep === 1) color = '#f43f5e';
+                    else if (node.timeStep === 2) color = '#f59e0b';
+                    else if (node.timeStep === 3) color = '#34d399';
+                }
+
+                // Target Glowing Pulsar
+                if (isCenter) {
+                    const glowRadius = 24 + Math.sin(animFrame * 0.06) * 4;
+                    ctx.beginPath();
+                    ctx.arc(node.x, node.y, glowRadius, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(244, 63, 94, 0.2)';
+                    ctx.fill();
+                }
+
+                const r = node.isHull ? 20 : (isCenter ? 18 : (isSelected ? 14 : 10));
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+
+                if (isSelected || isCenter) {
+                    ctx.strokeStyle = '#38bdf8';
+                    ctx.lineWidth = 2.5;
+                    ctx.stroke();
+                } else if (node.isHull) {
+                    ctx.strokeStyle = '#475569';
+                    ctx.setLineDash([3, 3]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                } else {
+                    ctx.strokeStyle = '#0b0f19';
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+                }
+
+                // Labels
+                ctx.fillStyle = isActivated ? '#ffffff' : '#64748b';
+                ctx.font = node.isHull ? '10px monospace' : 'bold 11px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(node.name, node.x, node.y + r + 12);
+
+                ctx.font = '9px monospace';
+                ctx.fillStyle = '#64748b';
+                ctx.fillText(node.file, node.x, node.y + r + 24);
+            });
+        }
+
+        // TIMELINE CONTROLLER
+        function setTimeStep(step) {
+            currentTimeStep = step;
+            updateTimelineUI();
+            buildFileTreeUI();
+            updateInspectorUI();
+        }
+
+        function updateTimelineUI() {
+            const steps = [
+                { id: 'stepT0', step: 0 },
+                { id: 'stepT1', step: 1 },
+                { id: 'stepT2', step: 2 },
+                { id: 'stepT3', step: 3 }
+            ];
+
+            steps.forEach(s => {
+                const btn = document.getElementById(s.id);
+                if (s.step <= currentTimeStep) {
+                    btn.className = "step-btn px-2.5 py-1 rounded-lg bg-rose-950 border border-rose-700 text-rose-300 font-bold shadow";
+                } else {
+                    btn.className = "step-btn px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-slate-400";
+                }
+            });
+
+            document.getElementById('inspStepTag').innerText = `Step T${currentTimeStep}`;
+        }
+
+        // UPDATE RIGHT INSPECTOR PANEL
+        function updateInspectorUI() {
+            if (!selectedNode) return;
+
+            // Node Detail
+            document.getElementById('inspFile').innerText = selectedNode.file;
+            document.getElementById('inspName').innerText = selectedNode.name;
+            document.getElementById('inspDesc').innerText = selectedNode.desc;
+            document.getElementById('inspSignature').innerText = selectedNode.signature;
+
+            // Domino Chain Trace
+            const chainContainer = document.getElementById('dominoChainList');
+            chainContainer.innerHTML = '';
+
+            const chainSteps = [
+                { t: 0, label: 'T0: Target Modified', file: 'auth/service.py', func: 'def login()' },
+                { t: 1, label: 'T1: Hop 1 Direct Call', file: 'auth/middleware.py', func: 'AuthMiddleware' },
+                { t: 2, label: 'T2: Hop 2 API Route', file: 'api/v1/auth_routes.py', func: 'login_endpoint()' },
+                { t: 3, label: 'T3: Hop 3 Dashboard', file: 'frontend/dashboard_bridge.py', func: 'render_dashboard()' }
+            ];
+
+            chainSteps.forEach(step => {
+                const isActive = step.t <= currentTimeStep;
+                const div = document.createElement('div');
+                div.className = `p-2 rounded-lg border ${isActive ? 'bg-slate-900 border-rose-900/60 text-slate-200' : 'bg-slate-950/40 border-slate-900 text-slate-600'}`;
+                div.innerHTML = `
+                    <div class="flex items-center justify-between text-[10px] font-bold">
+                        <span class="${isActive ? 'text-rose-400' : 'text-slate-600'}">${step.label}</span>
+                        <span class="px-1.5 py-0.2 rounded bg-slate-800 text-[9px]">${isActive ? 'ACTIVE' : 'MUTED'}</span>
+                    </div>
+                    <div class="text-[11px] font-mono mt-0.5">${step.file} :: <strong class="text-white">${step.func}</strong></div>
+                `;
+                chainContainer.appendChild(div);
+            });
+
+            // Impacted Tests
+            const testsContainer = document.getElementById('inspTests');
+            testsContainer.innerHTML = '';
+            if (selectedNode.tests && selectedNode.tests.length > 0) {
+                selectedNode.tests.forEach(t => {
+                    const div = document.createElement('div');
+                    div.className = 'flex items-center gap-1.5 text-purple-300 bg-purple-950/20 border border-purple-900/40 p-2 rounded-lg';
+                    div.innerHTML = `<i data-lucide="check-circle" class="w-3.5 h-3.5 text-purple-400"></i> <span>${t}</span>`;
+                    testsContainer.appendChild(div);
+                });
+                lucide.createIcons();
+            } else {
+                testsContainer.innerHTML = '<div class="text-slate-500 italic">No direct tests mapped</div>';
+            }
+        }
+
+        // RESERVED FEATURE MODAL HANDLERS
+        function showFutureTabModal(featureName) {
+            document.getElementById('modalTitle').innerText = featureName;
+            document.getElementById('modalDesc').innerText = `The "${featureName}" module space is reserved for upcoming workflow extensions (e.g. guide walkthroughs, automated PR risk checks, and architectural dependency analysis).`;
+            document.getElementById('futureModal').classList.remove('hidden');
+        }
+
+        function closeFutureModal() {
+            document.getElementById('futureModal').classList.add('hidden');
+        }
+
+        // EVENT LISTENERS
+        function attachEventListeners() {
+            window.addEventListener('resize', resizeCanvas);
+
+            // Dataset Toggle
+            document.getElementById('btnRepoStandard').addEventListener('click', () => initDataset('standard'));
+            document.getElementById('btnRepoMassive').addEventListener('click', () => initDataset('massive'));
+
+            // Direct Step Buttons
+            ['stepT0', 'stepT1', 'stepT2', 'stepT3'].forEach((id, idx) => {
+                document.getElementById(id).addEventListener('click', () => setTimeStep(idx));
+            });
+
+            // Canvas Zoom & Pan
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+                const newK = Math.min(Math.max(0.4, transform.k * zoomFactor), 3.5);
+                const mouseX = e.clientX - 256;
+                const mouseY = e.clientY - 56;
+
+                transform.x = mouseX - (mouseX - transform.x) * (newK / transform.k);
+                transform.y = mouseY - (mouseY - transform.y) * (newK / transform.k);
+                transform.k = newK;
+
+                document.getElementById('zoomText').innerText = `${Math.round(transform.k * 100)}%`;
+            });
+
+            canvas.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                dragStart = { x: e.clientX - transform.x, y: e.clientY - transform.y };
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (isDragging) {
+                    transform.x = e.clientX - dragStart.x;
+                    transform.y = e.clientY - dragStart.y;
+                }
+            });
+
+            window.addEventListener('mouseup', () => { isDragging = false; });
+
+            // Click Selection
+            canvas.addEventListener('click', (e) => {
+                const mouseX = e.clientX - 256;
+                const mouseY = e.clientY - 56;
+                const worldPos = { x: (mouseX - transform.x) / transform.k, y: (mouseY - transform.y) / transform.k };
+
+                const hit = currentDataset.nodes.find(n => Math.hypot(n.x - worldPos.x, n.y - worldPos.y) < 20);
+                if (hit) {
+                    selectedNode = hit;
+                    highlightTreeItem(hit.id);
+                    updateInspectorUI();
+                }
+            });
+
+            document.getElementById('btnResetView').addEventListener('click', () => {
+                transform = { x: width / 2, y: height / 2, k: 1 };
+                document.getElementById('zoomText').innerText = `100%`;
+            });
+        }
+    </script>
+</body>
+</html>
